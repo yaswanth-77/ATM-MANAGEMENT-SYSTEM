@@ -1,52 +1,68 @@
-# Prerequisites
-*.d
+#include <stdio.h>
+#include <stdlib.h>
+#include <pthread.h>
+#include <semaphore.h>
+#include <string.h>
 
-# Object files
-*.o
-*.ko
-*.obj
-*.elf
+#define NUM_ACCOUNTS 3
 
-# Linker output
-*.ilk
-*.map
-*.exp
+typedef struct {
+    float balance;
+    sem_t lock;
+} Account;
 
-# Precompiled Headers
-*.gch
-*.pch
+Account accounts[NUM_ACCOUNTS];
 
-# Libraries
-*.lib
-*.a
-*.la
-*.lo
+void *deposit(void *arg) {
+    int acc_id = *((int *)arg);
+    float amount = 100.0;
+    
+    sem_wait(&accounts[acc_id].lock);
+    accounts[acc_id].balance += amount;
+    printf("Deposited %.2f to account %d. New balance: %.2f\n", amount, acc_id, accounts[acc_id].balance);
+    sem_post(&accounts[acc_id].lock);
+    
+    return NULL;
+}
 
-# Shared objects (inc. Windows DLLs)
-*.dll
-*.so
-*.so.*
-*.dylib
+void *withdraw(void *arg) {
+    int acc_id = *((int *)arg);
+    float amount = 50.0;
+    
+    sem_wait(&accounts[acc_id].lock);
+    if (accounts[acc_id].balance >= amount) {
+        accounts[acc_id].balance -= amount;
+        printf("Withdrew %.2f from account %d. New balance: %.2f\n", amount, acc_id, accounts[acc_id].balance);
+    } else {
+        printf("Insufficient funds in account %d!\n", acc_id);
+    }
+    sem_post(&accounts[acc_id].lock);
+    
+    return NULL;
+}
 
-# Executables
-*.exe
-*.out
-*.app
-*.i*86
-*.x86_64
-*.hex
-
-# Debug files
-*.dSYM/
-*.su
-*.idb
-*.pdb
-
-# Kernel Module Compile Results
-*.mod*
-*.cmd
-.tmp_versions/
-modules.order
-Module.symvers
-Mkfile.old
-dkms.conf
+int main() {
+    pthread_t threads[NUM_ACCOUNTS * 2];
+    int acc_ids[NUM_ACCOUNTS];
+    
+    for (int i = 0; i < NUM_ACCOUNTS; i++) {
+        accounts[i].balance = 1000.0;
+        sem_init(&accounts[i].lock, 0, 1);
+        acc_ids[i] = i;
+    }
+    
+    for (int i = 0; i < NUM_ACCOUNTS; i++) {
+        pthread_create(&threads[i], NULL, deposit, &acc_ids[i]);
+        pthread_create(&threads[i + NUM_ACCOUNTS], NULL, withdraw, &acc_ids[i]);
+    }
+    
+    for (int i = 0; i < NUM_ACCOUNTS * 2; i++) {
+        pthread_join(threads[i], NULL);
+    }
+    
+    for (int i = 0; i < NUM_ACCOUNTS; i++) {
+        sem_destroy(&accounts[i].lock);
+    }
+    
+    return 0;
+}
